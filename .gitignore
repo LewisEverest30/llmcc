@@ -169,3 +169,5 @@ output/*
 *.pth
 *.pkl
 *.txt
+
+.vscode

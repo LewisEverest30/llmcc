@@ -1,12 +1,7 @@
-# 运行代码
+## 项目简介
+基于大语言模型（LLM）构造融合GCC、PCC、BBR等多种拥塞控制算法以及具有自动选择能力的网络预测模型。
+
+## 运行代码
 ```python
 python .\main.py
 ```
-
-
-
-收数据：python .\main.py --stage 3 --train
-
-训1阶段：python .\main.py --stage 1 --train --is_initial_training
-
-在线测试：python .\main.py --stage 2 --test

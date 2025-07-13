@@ -59,9 +59,9 @@ class CcDatasetAeWithSeqPredict(Dataset):
         for i in range(window_size-1, len(data)-2):
             x_one = []  # [[rtt1, loss1, tp1], [rtt2, loss2, tp2], ...,]  [window_size, 3]
             for j in range(window_size):  # 把当前和历史窗口的数据放到x_one中
-                x_one.append(data[i-window_size+j+1])
+                x_one.append(data[i-window_size+j+1][:-1])
             self.batch_x.append(x_one)
-            self.batch_y.append(data[i+1])  # 下一步的网络状态是标签
+            self.batch_y.append(data[i+1][:-1])  # 下一步的网络状态是标签
         self.batch_x = torch.tensor(self.batch_x, dtype=torch.float32)
         self.batch_y = torch.tensor(self.batch_y, dtype=torch.float32)
     

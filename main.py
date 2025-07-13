@@ -1,10 +1,13 @@
 import argparse
 import torch
 
-from dataset import CcDataset, Stage2Dataset
+from dataset import CcDataset, CcDatasetUseTc, CcDatasetUseTcNoWindow
 from llmcc import *
 from plm import get_plm
 from autoencoder.ae_model import Autoencoder
+
+import winsound
+import ctypes
 
 def train(
         is_initial_training: bool,
@@ -28,13 +31,14 @@ def train(
     print("Epochs", epochs)
 
     # =================== 数据集 ===================
-    train_dataset = CcDataset(train_dataset_path)
+    # train_dataset = CcDataset(train_dataset_path)
+    train_dataset = CcDatasetUseTcNoWindow(train_dataset_path)
 
     # =================== 载入外部训练的AutoEncoder模型 ===================
-    ae = Autoencoder()
-    if is_initial_training: # 如果是初始训练，则载入外部训练的ae模型
-        ae.load_state_dict(torch.load(ae_pretrained_model_path))
-    ae = ae.to(device)
+    # ae = Autoencoder()
+    # if is_initial_training: # 如果是初始训练，则载入外部训练的ae模型
+    #     ae.load_state_dict(torch.load(ae_pretrained_model_path))
+    # ae = ae.to(device)
 
     # =================== 构建孪生cc模型 ===================
     plm, plm_embed_size = get_plm(
@@ -45,7 +49,11 @@ def train(
             device=device,
         )
 
-    twin_cc_net = LlmCC(ae, plm, plm_embed_size)
+    twin_cc_net = LlmCC(
+        # ae,
+        plm,
+        plm_embed_size,
+    )
     if not is_initial_training:  # 如果不是初始训练，则整体载入已训练的孪生cc模型
         LlmCC.load_model(twin_cc_net, load_llmcc_model_path, lora_rank)
 
@@ -61,7 +69,6 @@ def train(
         lora_rank=lora_rank,
     )
 
-
 def test(
         plm_model_name: str,
         plm_model_size: str,
@@ -71,9 +78,13 @@ def test(
         device: str,
         batch_size: int,
         lora_rank: int,
+        online_test: bool,
 ):
     # =================== 数据集 ===================
-    test_dataset = CcDataset(test_dataset_path)
+    # test_dataset = CcDataset(test_dataset_path)
+    # test_dataset = CcDatasetUseTc(test_dataset_path)
+    test_dataset = CcDatasetUseTcNoWindow(test_dataset_path)
+
 
     # =================== 载入外部训练的AutoEncoder模型 ===================
     ae = Autoencoder()
@@ -88,16 +99,37 @@ def test(
             device=device,
         )
 
-    twin_cc_net = LlmCC(ae, plm, plm_embed_size)
+    twin_cc_net = LlmCC(
+        # ae,
+        plm,
+        plm_embed_size,
+    )
     LlmCC.load_model(twin_cc_net, load_llmcc_model_path, lora_rank)
     print("载入模型路径:", load_llmcc_model_path)
 
     # =================== 测试 ===================
-    test_LlmCC(
-        model=twin_cc_net,
-        test_dataset=test_dataset,
-        batch_size=batch_size,
-    )
+    if online_test:
+        # ========== 启动服务器 ===================
+        try:
+            # winsound.Beep(440, 500)
+            ctypes.windll.kernel32.Beep(1000, 500)
+            data_server = DataServer()
+        except Exception as e:
+            print(f"连接服务器时出现异常: {e}")
+            return
+        test_LlmCC_online(
+            data_server=data_server,
+            model=twin_cc_net,
+            collect_epochs=1,  # 收集数据的轮数
+            device=device,
+            output_info_dir='./output/test/',
+        )
+    else:
+        test_LlmCC_offline(
+            model=twin_cc_net,
+            test_dataset=test_dataset,
+            batch_size=batch_size,
+        )
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -107,21 +139,18 @@ if __name__ == '__main__':
     PLM_MODEL_BASE_PATH = './plm_model'  # PLM模型存放路径
     AE_MODEL_PATH = './autoencoder/checkpoint/model_500.pth'  # 外部训练的ae模型路径
     TWINCC_MODEL_BASE_PATH = './checkpoint'  # 孪生cc模型存放路径
-
+    TRAIN_DATASET_PATH = './data/gcc.pkl'  # 一阶段训练数据集路径
+    TEST_DATASET_PATH = './data/gcc.pkl'  # 测试数据集路径
 
     # =================== 训练参数 ===================
-    TRAIN_DATASET_PATH = './data/pcc.pkl'  # 一阶段训练数据集路径
     LORA_RANK = 4  # lora rank
     BATCH_SIZE = 32  # batch size
     LR = 1e-4  # learning rate
     WEIGHT_DECAY = 1e-5  # weight decay
-    EPOCHS = 30  # 训练轮数
-
-    LOAD_MODEL_EPOCH = 30  # 继续训练时候载入的模型的epoch
+    EPOCHS = 20  # 训练轮数
+    LOAD_MODEL_EPOCH = 1  # 继续训练时候载入的模型的epoch
     PARAMETERS = "batch_size_32_lr_0.0001_weight_decay_1e-05_lora_rank_4"
     
-    TEST_DATASET_PATH = './data/pcc.pkl'  # 测试数据集路径
-
     # =================== 启动参数 ===================
     parser.add_argument('--is_initial_training', action='store_true',
                         help='是否是初始训练 (即只在外部训练了ae模型，尚未整体训练整体模型) (default: False)')
@@ -129,13 +158,17 @@ if __name__ == '__main__':
                         help='是否进行训练 (default: False)')
     parser.add_argument('--test', action='store_true',
                         help='是否进行测试 (default: False)')
+    parser.add_argument('--online_test', action='store_true', default=False,
+                        help='是否进行在线测试 (default: False)')
     args = parser.parse_args()
     IS_INITIAL_TRAINING = args.is_initial_training
     TRAIN = args.train
     TEST = args.test
+    ONLINE_TEST = args.online_test
     print(f'IS_INITIAL_TRAINING: {IS_INITIAL_TRAINING}')
     print(f'TRAIN: {TRAIN}')
     print(f'TEST: {TEST}')
+    print(f'ONLINE_TEST: {ONLINE_TEST}')
 
     if TRAIN:
         train(
@@ -144,7 +177,8 @@ if __name__ == '__main__':
             plm_model_size=PLM_MODEL_SIZE,
             plm_model_path=f'{PLM_MODEL_BASE_PATH}/{PLM_MODEL_NAME}/{PLM_MODEL_SIZE}',
             ae_pretrained_model_path=AE_MODEL_PATH,
-            load_llmcc_model_path=f'{TWINCC_MODEL_BASE_PATH}/{PARAMETERS}/{LOAD_MODEL_EPOCH}',
+            # load_llmcc_model_path=f'{TWINCC_MODEL_BASE_PATH}/{PARAMETERS}/{LOAD_MODEL_EPOCH}',
+            load_llmcc_model_path=f'{TWINCC_MODEL_BASE_PATH}/backup/{PARAMETERS}/{LOAD_MODEL_EPOCH}',
             train_dataset_path=TRAIN_DATASET_PATH,
             device='cuda' if torch.cuda.is_available() else 'cpu',
             lora_rank=LORA_RANK,
@@ -161,7 +195,10 @@ if __name__ == '__main__':
             plm_model_path=f'{PLM_MODEL_BASE_PATH}/{PLM_MODEL_NAME}/{PLM_MODEL_SIZE}',
             test_dataset_path=TEST_DATASET_PATH,
             load_llmcc_model_path=f'{TWINCC_MODEL_BASE_PATH}/{PARAMETERS}/{LOAD_MODEL_EPOCH}',
+            # load_llmcc_model_path=f'{TWINCC_MODEL_BASE_PATH}/backup/{PARAMETERS}/{LOAD_MODEL_EPOCH}',
             device='cuda' if torch.cuda.is_available() else 'cpu',
-            batch_size=BATCH_SIZE,
+            # batch_size=BATCH_SIZE,
+            batch_size=1,  # 测试时batch size设置为1
             lora_rank=LORA_RANK,
+            online_test=ONLINE_TEST,
         )

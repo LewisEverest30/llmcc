@@ -1,6 +1,6 @@
 
 class Config:
-    seq_len = 20
+    seq_len = 30
 
     intercept_strategy_choice_num = 10
     intercept_strategy_choice_interval = 2

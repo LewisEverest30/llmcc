@@ -14,15 +14,16 @@ def process_dataset():
             print(file)
             with open(old_dataset_path + file, 'r') as f:
                 for line in f:
-                    net_perfom = line.strip().split()
-                    rtt = float(net_perfom[2])
-                    loss = float(net_perfom[3])
-                    throughput = float(net_perfom[4])/1000
+                    net_perfom = line.strip().split('\t')
+                    rtt = float(net_perfom[0])
+                    loss = float(net_perfom[1])
+                    throughput = float(net_perfom[2])
+                    tc = float(net_perfom[3])
                     if throughput < 0:
                         print(f"throughput: {throughput}")
-                        all_data.append([rtt, loss, 0])
+                        all_data.append([rtt, loss, 0, tc])
                     else:
-                        all_data.append([rtt, loss, throughput])
+                        all_data.append([rtt, loss, throughput, tc])
 
         with open(PROCESSED_DATA_BASE_PATH + cc + '.pkl', 'wb') as f:
             pickle.dump(all_data, f)

@@ -4,7 +4,6 @@ from typing import List, Optional
 from transformers import GPT2Config, GPT2Tokenizer, GPT2Model, \
                         LlamaConfig, LlamaTokenizer, LlamaModel, \
                         AutoConfig, AutoTokenizer, AutoModelForCausalLM
-from openprompt.plms import LMTokenizerWrapper
 from collections import namedtuple
 import transformers
 
@@ -12,31 +11,27 @@ from config import cfg
 from lora import peft_model
 
 
-ModelClass = namedtuple("ModelClass", ('config', 'tokenizer', 'model','wrapper'))
+ModelClass = namedtuple("ModelClass", ('config', 'tokenizer', 'model'))
 _MODEL_CLASSES = {
     'gpt2': ModelClass(**{
         'config': GPT2Config,
         'tokenizer': GPT2Tokenizer,
         'model': GPT2Model,
-        'wrapper': LMTokenizerWrapper
     }),
     "qwen2": ModelClass(**{
         "config": AutoConfig,
         "tokenizer": AutoTokenizer,
         "model": AutoModelForCausalLM,
-        "wrapper": LMTokenizerWrapper
     }),    
     "qwen2.5": ModelClass(**{
         "config": AutoConfig,
         "tokenizer": AutoTokenizer,
         "model": AutoModelForCausalLM,
-        "wrapper": LMTokenizerWrapper
     }),
     "llama": ModelClass(**{
         "config": LlamaConfig,
         "tokenizer": LlamaTokenizer,
         "model": LlamaModel,
-        "wrapper": LMTokenizerWrapper
     }),
 }
 
@@ -55,9 +50,7 @@ def load_plm(model_name, model_path, specials_to_add = None, **kwargs):
     model = model_class.model.from_pretrained(model_path)
 
     tokenizer = model_class.tokenizer.from_pretrained(model_path) 
-    
-    wrapper = model_class.wrapper
-    
+        
     if specials_to_add is None:
         specials_to_add = ['<pad>']
     else:
@@ -67,7 +60,7 @@ def load_plm(model_name, model_path, specials_to_add = None, **kwargs):
     
     if 'opt' in model_name:
         tokenizer.add_bos_token=False
-    return model, tokenizer, None, wrapper
+    return model, tokenizer, None
 
 
 def add_special_tokens(model: transformers.modeling_utils.PreTrainedModel,
